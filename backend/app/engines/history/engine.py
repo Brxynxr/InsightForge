@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from app.engines.base import BaseEngine, EngineContext
 
@@ -12,7 +12,7 @@ class HistoryEngine(BaseEngine):
             "batch_id": context.batch_id,
             "batch_index": context.batch_index,
             "total_batches": context.total_batches,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "record_count": len(context.records),
             "metrics": context.metrics,
             "error_count": len(context.errors),

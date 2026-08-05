@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import Enum as PyEnum
 from typing import Any
 
-from sqlalchemy import JSON, DateTime, Enum, Integer, String, Text, func
+from sqlalchemy import JSON, DateTime, Enum, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -52,7 +52,7 @@ class JobRecord(Base):
     __tablename__ = "job_records"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    job_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    job_id: Mapped[int] = mapped_column(Integer, ForeignKey("jobs.id"), nullable=False, index=True)
     record_index: Mapped[int] = mapped_column(Integer, nullable=False)
     original_data: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     optimized_text: Mapped[str | None] = mapped_column(Text, nullable=True)
