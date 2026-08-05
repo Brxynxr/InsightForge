@@ -1,0 +1,62 @@
+[tool.poetry]
+name = "promptforge-backend"
+version = "0.1.0"
+description = "PromptForge - Enterprise AI Prompt Optimization Platform"
+authors = ["PromptForge Team"]
+readme = "README.md"
+packages = [{include = "app"}]
+
+[tool.poetry.dependencies]
+python = "^3.12"
+fastapi = "^0.115.0"
+uvicorn = {extras = ["standard"], version = "^0.34.0"}
+pydantic = "^2.10.0"
+pydantic-settings = "^2.7.0"
+sqlalchemy = "^2.0.0"
+asyncpg = ">=0.30.0"
+alembic = "^1.14.0"
+pandas = "^2.2.0"
+openpyxl = "^3.1.0"
+numpy = "^2.2.0"
+tiktoken = ">=0.9.0"
+deep-translator = "^1.11.0"
+redis = {extras = ["hiredis"], version = "^5.2.0", optional = true}
+httpx = "^0.28.0"
+python-multipart = "^0.0.18"
+aiofiles = "^24.1.0"
+loguru = "^0.7.0"
+
+[tool.poetry.extras]
+redis = ["redis"]
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.3.0"
+pytest-asyncio = "^0.25.0"
+pytest-cov = "^6.0.0"
+ruff = "^0.9.0"
+mypy = "^1.14.0"
+pandas-stubs = "^3.0.5.260730"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+src = ["app"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "A", "C4", "SIM"]
+
+[tool.ruff.lint.per-file-ignores]
+"app/api/routes.py" = ["B008"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+plugins = ["pydantic.mypy"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
