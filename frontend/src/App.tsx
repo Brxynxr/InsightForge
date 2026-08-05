@@ -4,6 +4,7 @@ import DashboardPage from "@/components/pages/DashboardPage";
 import UploadPage from "@/components/pages/UploadPage";
 import HistoryPage from "@/components/pages/HistoryPage";
 import SettingsPage from "@/components/pages/SettingsPage";
+import BenchmarkPage from "@/components/pages/BenchmarkPage";
 
 function App() {
   return (
@@ -13,6 +14,7 @@ function App() {
         <Route path="upload" element={<UploadPage />} />
         <Route path="history" element={<HistoryPage />} />
         <Route path="settings" element={<SettingsPage />} />
+        <Route path="benchmark" element={<BenchmarkPage />} />
       </Route>
     </Routes>
   );

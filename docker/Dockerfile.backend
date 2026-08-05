@@ -13,7 +13,7 @@ COPY backend/poetry.lock ./
 
 RUN pip install --no-cache-dir "poetry>=2.0" "poetry-plugin-export"
 
-RUN poetry export -o requirements.txt --without-hashes \
+RUN poetry export -o requirements.txt --without-hashes --extras redis \
     && pip install --no-cache-dir -r requirements.txt \
     && rm requirements.txt
 

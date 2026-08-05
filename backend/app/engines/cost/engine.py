@@ -1,15 +1,36 @@
-from app.core.config import settings
 from app.engines.base import BaseEngine, EngineContext
 
 
 class CostEngine(BaseEngine):
-    """Responsible for daily/monthly estimation, savings calculation, comparative reports."""
+    """Calculates costs at $2.50 USD per million tokens.
+    Supports daily (10k reviews) and monthly (300k reviews) projections."""
+
+    COST_PER_MILLION_TOKENS: float = 2.50
 
     def execute(self, context: EngineContext) -> EngineContext:
         total_tokens = context.metrics.get("total_tokens", 0)
-        price_per_1k = getattr(settings, "LLM_PRICE_PER_1K_TOKENS", 0.00015)
-        estimated_cost = (total_tokens / 1000) * price_per_1k
+        total_input_tokens = context.metrics.get("total_input_tokens", 0)
+        tokens = total_tokens or total_input_tokens
+
+        estimated_cost = (tokens / 1_000_000) * self.COST_PER_MILLION_TOKENS
+
+        total_records = context.metadata.get("total_records", 0)
+        avg_tokens_per_record = tokens / max(total_records, 1)
+
+        daily_10k = avg_tokens_per_record * 10_000
+        monthly_300k = avg_tokens_per_record * 300_000
+
+        context.metrics["cost_per_million_tokens"] = self.COST_PER_MILLION_TOKENS
         context.metrics["estimated_cost"] = round(estimated_cost, 6)
-        context.metrics["daily_estimate"] = round(estimated_cost * 30, 4)
-        context.metrics["monthly_estimate"] = round(estimated_cost * 300, 4)
+        context.metrics["daily_estimate_10k_reviews"] = {
+            "total_tokens": round(daily_10k),
+            "cost_usd": round((daily_10k / 1_000_000) * self.COST_PER_MILLION_TOKENS, 2),
+        }
+        context.metrics["monthly_estimate_300k_reviews"] = {
+            "total_tokens": round(monthly_300k),
+            "cost_usd": round(
+                (monthly_300k / 1_000_000) * self.COST_PER_MILLION_TOKENS, 2
+            ),
+        }
+
         return context

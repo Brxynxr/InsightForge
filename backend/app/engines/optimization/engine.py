@@ -9,16 +9,29 @@ from app.engines.base import BaseEngine, EngineContext
 
 
 class OptimizationEngine(BaseEngine):
-    """Responsible for translation, prompt normalization, deduplication."""
+    """Responsible for translation, prompt normalization, deduplication.
+    Respects optimize_tokens flag: if False, skips translation entirely."""
 
     def __init__(self, cache: dict[str, Any] | None = None) -> None:
         self._cache: dict[str, Any] = cache or {}
 
     def execute(self, context: EngineContext) -> EngineContext:
-        target_language = context.metadata.get("target_language") or "es"
+        target_language = context.metadata.get("target_language") or "en"
+        optimize = context.metadata.get("optimize_tokens", True)
+        review_column = context.metadata.get("review_column") or "reseña"
+
+        translated_count = 0
+        skipped_count = 0
 
         for record in context.records:
-            text = record.get("text", "")
+            text = record.get(review_column, record.get("text", ""))
+
+            if not optimize:
+                record["optimized_text"] = text
+                record["translation_hit"] = False
+                skipped_count += 1
+                continue
+
             key_data = {"text": text, "lang": target_language}
             cache_key = hashlib.md5(json.dumps(key_data).encode()).hexdigest()
 
@@ -30,19 +43,20 @@ class OptimizationEngine(BaseEngine):
                 record["optimized_text"] = optimized
                 self._cache[cache_key] = optimized
                 record["translation_hit"] = False
+                translated_count += 1
 
         context.metadata["optimization_cache_size"] = len(self._cache)
+        context.metrics["translations_performed"] = translated_count
+        context.metrics["translations_skipped"] = skipped_count
         context.metrics["translation_hits"] = sum(
             1 for r in context.records if r.get("translation_hit")
         )
+
         return context
 
     def _translate_and_normalize(self, text: str, target_language: str) -> str:
         normalized = self._normalize(text)
         if not normalized:
-            return normalized
-
-        if target_language.lower() == "en":
             return normalized
 
         try:

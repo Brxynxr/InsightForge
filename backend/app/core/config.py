@@ -22,7 +22,11 @@ class Settings(BaseSettings):
     TOKENIZER_ENCODING: str = "o200k_base"
 
     LLM_PRICE_PER_1K_TOKENS: float = 0.00015
+    LLM_PRICE_PER_1M_TOKENS: float = 2.50
     LLM_MODEL: str = "gpt-4o-mini"
+
+    ANALYZE_BATCH_SIZE: int = 50
+    ANALYZE_MAX_CONCURRENT: int = 20
 
     model_config = SettingsConfigDict(
         env_file=".env",

@@ -1,16 +1,19 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { processJob, checkHealth, getHistory, getJobDetail } from "@/services/api";
-import { useAppStore } from "@/stores/appStore";
-import type { JobResponse } from "@/types";
+import {
+  checkHealth,
+  getHistory,
+  getJobDetail,
+  analyzeReviews,
+  runBenchmark,
+} from "@/services/api";
+import type { BenchmarkResult } from "@/types";
 
-export function useProcessJob() {
+export function useAnalyzeReviews() {
   const queryClient = useQueryClient();
-  const addHistory = useAppStore((state) => state.addHistory);
 
   return useMutation({
-    mutationFn: (formData: FormData) => processJob(formData),
-    onSuccess: (data: JobResponse) => {
-      addHistory(data);
+    mutationFn: (formData: FormData) => analyzeReviews(formData),
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["history"] });
     },
   });
@@ -36,7 +39,13 @@ export function useHistory() {
 export function useJobDetail(batchId: string | null) {
   return useQuery({
     queryKey: ["jobDetail", batchId],
-    queryFn: () => getJobDetail(batchId!),
+    queryFn: () => getJobDetail(batchId as string),
     enabled: Boolean(batchId),
+  });
+}
+
+export function useBenchmark() {
+  return useMutation({
+    mutationFn: (formData: FormData) => runBenchmark(formData),
   });
 }

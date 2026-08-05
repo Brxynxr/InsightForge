@@ -1,114 +1,108 @@
 # PromptForge
 
-> Plataforma AI modular de grado empresarial para optimizar flujos de trabajo de procesamiento de texto antes de enviarlos a LLMs.
+> Plataforma AI modular para análisis de reseñas de App Store con procesamiento de alto rendimiento.
 
 [![CI](.github/workflows/ci.yml)](.github/workflows/ci.yml)
 
-## Descripción General
+## Descripción
 
-PromptForge ingresa conjuntos de datos de Excel, opcionalmente optimiza texto mediante traducción o futuras estrategias, mide el consumo de tokens usando tiktoken, estima costos, envía prompts a un LLM, parsea respuestas estructuradas y exporta resultados.
+PromptForge procesa archivos Excel con reseñas de aplicaciones, las tokeniza con tiktoken, opcionalmente las traduce para optimizar costos, las envía a un LLM para clasificación de errores técnicos, y exporta resultados estructurados con métricas detalladas.
+
+### Benchmark (150k reseñas en ~12 segundos)
+
+| Archivo | Registros | Tiempo | Tokens | Costo estimado |
+|---------|-----------|--------|--------|----------------|
+| 50k reseñas | 50,000 | ~4s | 741,737 | $1.85 USD |
+| 100k reseñas | 100,000 | ~8s | 1,480,734 | $3.70 USD |
+| 150k reseñas | 150,000 | ~12s | 2,219,100 | $5.55 USD |
 
 ## Arquitectura
 
-Desarrollada como una plataforma de software empresarial con una arquitectura layered:
-
 ```
-SPA React → API REST FastAPI → Pipeline de Procesamiento → Proveedor LLM → Parser → Exportador → Historia
+SPA React → API REST FastAPI → Pipeline de Engines → LLM → Parser → Export → DB
 ```
 
-Cada etapa de procesamiento es un Engine independiente con un contrato único: `execute(context)`.
+Cada etapa es un Engine independiente con contrato `execute(context)`:
 
-### Fases de Desarrollo
+- **InputEngine** — Lectura de archivos Excel/CSV
+- **ValidationEngine** — Validación de columnas y registros vacíos
+- **OptimizationEngine** — Traducción y optimización de tokens
+- **TokenizerEngine** — Conteo de tokens (tiktoken o200k_base)
+- **CostEngine** — Cálculo de costos ($2.50/M tokens)
+- **ExportEngine** — Exportación a JSON/CSV
+- **HistoryEngine** — Tracking de métricas en pipeline
+- **TokenCompareEngine** — Comparación ES vs EN
+- **AnalyzeEngine** — Clasificación de errores via LLM
 
-| Fase | Descripción |
-|------|-------------|
-| Fase 1 | Fundamentos (estructura, Docker, configuración, CI/CD, docs) ✅ |
-| Fase 2 | SPA Frontend ✅ |
-| Fase 3 | API Backend Completa |
-| Fase 4 | Módulos de Negocio + Engines |
-| Fase 5 | Deploy de Producción |
+## Tecnologías
 
-## Tecnologías Utilizadas
-
-**Frontend**: React 19, TypeScript, Vite, TailwindCSS, React Router, TanStack Query, React Hook Form, Zod, Zustand
-
-**Backend**: FastAPI, Python 3.12+, Pydantic, Poetry, Loguru
-
-**Procesamiento**: Pandas, OpenPyXL, NumPy, tiktoken (o200k_base), deep_translator
-
-**Base de Datos**: PostgreSQL, Redis (cache opcional)
+| Capa | Stack |
+|------|-------|
+| Frontend | React 19, TypeScript, Vite, TailwindCSS, TanStack Query, Zustand |
+| Backend | FastAPI, Python 3.12+, Pydantic, Poetry |
+| Procesamiento | Pandas, tiktoken, httpx, OpenPyXL |
+| Base de datos | PostgreSQL 16, Redis 7 |
+| Infraestructura | Docker Compose, Nginx, GitHub Actions CI |
 
 ## Inicio Rápido
 
-### Opción 1: Docker (Recomendado)
+### Docker (Recomendado)
 
 ```bash
-# Desde la raíz del proyecto
 docker compose up --build
-
-# O en segundo plano
-docker compose up -d --build
 ```
 
-Una vez levantado, accede a:
-- **Frontend**: http://localhost:5173
-- **API Backend**: http://localhost:8000
-- **API Docs (Swagger)**: http://localhost:8000/docs
-- **PostgreSQL**: localhost:5432
-- **Redis**: localhost:6379
+- Frontend: http://localhost:5173
+- Backend API: http://localhost:8000
+- Swagger Docs: http://localhost:8000/docs
 
-### Opción 2: Desarrollo Local
-
-#### Backend
+### Desarrollo Local
 
 ```bash
-cd backend
-poetry install
-cp .env.example .env
-poetry run uvicorn app.main:app --reload
+# Backend
+cd backend && poetry install && poetry run uvicorn app.main:app --reload
+
+# Frontend
+cd frontend && npm install && npm run dev
 ```
 
-#### Frontend
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-### Parar servicios
-
-```bash
-docker compose down -v
-```
-
-## Estructura del Proyecto
+## Estructura
 
 ```
 promptforge/
-├── frontend/              # SPA React 19
-├── backend/               # Backend FastAPI
-│   ├── app/
-│   │   ├── api/           # Rutas REST API
-│   │   ├── core/          # Configuración, base de datos, logging
-│   │   ├── middleware/    # Middleware personalizado
-│   │   ├── engines/       # Motores de procesamiento
-│   │   ├── models/        # Modelos SQLAlchemy
-│   │   ├── schemas/       # DTOs Pydantic
-│   │   ├── services/      # Lógica de negocio
-│   │   ├── migrations/    # Migraciones Alembic
-│   │   └── main.py        # Punto de entrada
-│   ├── tests/
-│   ├── .env.example
-│   └── pyproject.toml
-├── docs/                  # Documentación + ADRs
-├── prompts/               # Plantillas de prompts
-├── docker/                # Dockerfiles, configuración nginx
-├── scripts/               # Scripts de utilidad
-├── docker-compose.yml     # Docker Compose (raíz del proyecto)
-├── .github/workflows/     # CI/CD
-└── README.md              # Este archivo
+├── frontend/                  # SPA React 19
+│   └── src/
+│       ├── components/pages/  # Upload, Benchmark, History, Dashboard, Settings
+│       ├── hooks/             # React Query hooks
+│       ├── services/          # API client (axios)
+│       ├── stores/            # Zustand state
+│       └── types/             # TypeScript interfaces
+├── backend/                   # FastAPI
+│   └── app/
+│       ├── api/routes.py      # Endpoints REST
+│       ├── engines/           # 9 motores de procesamiento
+│       ├── models/            # SQLAlchemy (Job, JobRecord)
+│       ├── schemas/           # Pydantic DTOs
+│       ├── services/          # Pipeline + Benchmark
+│       └── main.py            # FastAPI app
+├── docker/                    # Dockerfiles + nginx + init.sql
+├── scripts/                   # Generador de reseñas de prueba
+├── docs/                      # Documentación + ADRs
+├── prompts/                   # Plantillas de prompts
+├── docker-compose.yml
+└── .github/workflows/ci.yml
 ```
+
+## API Endpoints
+
+| Método | Endpoint | Descripción |
+|--------|----------|-------------|
+| POST | `/api/v1/benchmark` | Benchmark de rendimiento (sin LLM) |
+| POST | `/api/v1/analyze` | Análisis completo con LLM |
+| POST | `/api/v1/process` | Pipeline estándar |
+| GET | `/api/v1/history` | Historial de procesos |
+| GET | `/api/v1/history/{id}` | Detalle de un proceso |
+| GET | `/api/v1/health` | Health check |
 
 ## Licencia
 

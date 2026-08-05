@@ -1,14 +1,8 @@
 #!/bin/bash
 set -e
 
-echo "Starting PostgreSQL and Redis containers..."
-docker compose -f docker/docker-compose.yml up db redis -d
-
-echo "Waiting for services to be ready..."
-sleep 5
-
 echo "Starting all services..."
-docker compose -f docker/docker-compose.yml up -d
+docker compose up -d
 
 echo "Services started!"
 echo "Backend: http://localhost:8000"

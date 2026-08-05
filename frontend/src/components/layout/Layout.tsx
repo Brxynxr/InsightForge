@@ -6,7 +6,7 @@ export default function Layout() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { data: health, isLoading: healthLoading } = useHealthCheck();
 
-  const navItems = [
+const navItems = [
     {
       to: "/",
       label: "Panel Principal",
@@ -26,8 +26,17 @@ export default function Layout() {
       ),
     },
     {
+      to: "/benchmark",
+      label: "Benchmark",
+      icon: (
+        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+        </svg>
+      ),
+    },
+    {
       to: "/history",
-      label: "Historial de Procesos",
+      label: "Historial",
       icon: (
         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
