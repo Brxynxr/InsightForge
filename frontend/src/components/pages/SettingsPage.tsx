@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -40,6 +40,8 @@ export default function SettingsPage() {
     updateSettings({
       target_language: data.target_language,
       export_formats: ["json"],
+      batch_size: data.batch_size,
+      openai_api_key: data.openai_api_key,
     });
     setSavedSuccess(true);
     setTimeout(() => setSavedSuccess(false), 3000);

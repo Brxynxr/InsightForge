@@ -1,30 +1,24 @@
 import { create } from "zustand";
-import type { JobResponse, JobRequest } from "@/types";
+import type { JobRequest } from "@/types";
+
+interface AppSettings extends JobRequest {
+  openai_api_key?: string;
+  batch_size: number;
+}
 
 interface AppState {
-  history: JobResponse[];
-  currentJob: JobResponse | null;
-  settings: JobRequest;
-  addHistory: (_job: JobResponse) => void;
-  setCurrentJob: (_job: JobResponse | null) => void;
-  updateSettings: (_newSettings: Partial<JobRequest>) => void;
+  settings: AppSettings;
+  updateSettings: (_newSettings: Partial<AppSettings>) => void;
 }
 
 export const useAppStore = create<AppState>((set) => ({
-  history: [],
-  currentJob: null,
   settings: {
     file_path: "",
     target_language: "es",
     export_formats: ["json"],
+    batch_size: 1000,
   },
-  addHistory: (job: JobResponse) =>
-    set((state) => ({
-      history: [job, ...state.history],
-    })),
-  setCurrentJob: (job: JobResponse | null) =>
-    set({ currentJob: job }),
-  updateSettings: (newSettings: Partial<JobRequest>) =>
+  updateSettings: (newSettings: Partial<AppSettings>) =>
     set((state) => ({
       settings: { ...state.settings, ...newSettings },
     })),
