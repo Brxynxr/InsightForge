@@ -3,6 +3,7 @@ import time
 import uuid
 from collections.abc import Awaitable
 from datetime import UTC, datetime
+from typing import Any
 
 from app.core.database import async_session
 from app.engines.analyze.engine import AnalyzeEngine
@@ -18,6 +19,8 @@ from app.engines.validation.engine import ValidationEngine
 from app.models import Job, JobRecord, JobStatus
 from app.schemas.job import AnalyzeRequest, AnalyzeResponse, JobRequest, JobResponse
 
+BATCH_INSERT_SIZE = 1000
+
 
 def _is_async_engine(engine: BaseEngine) -> bool:
     """Check if engine.execute is a coroutine function."""
@@ -30,6 +33,44 @@ async def _run_engine(engine: BaseEngine, context: EngineContext) -> EngineConte
     if isinstance(result, Awaitable):
         return await result
     return result
+
+
+async def _persist_job_records(
+    job_id: int,
+    records: list[dict[str, Any]],
+    results: list[dict[str, Any]],
+    original_data_filter: bool = False,
+    token_count_key: str = "token_count",
+) -> None:
+    """Persist job records in batches to avoid memory issues with large datasets."""
+    from app.core.database import async_session
+
+    async with async_session() as db:
+        for i in range(0, len(records), BATCH_INSERT_SIZE):
+            batch_records = records[i:i + BATCH_INSERT_SIZE]
+            batch_results = results[i:i + BATCH_INSERT_SIZE]
+
+            records_to_insert = []
+            for j, record in enumerate(batch_records):
+                result = batch_results[j] if j < len(batch_results) else {}
+
+                if original_data_filter:
+                    original_data = {k: v for k, v in record.items() if not k.startswith("_")}
+                else:
+                    original_data = record
+
+                records_to_insert.append(JobRecord(
+                    job_id=job_id,
+                    record_index=i + j,
+                    original_data=original_data,
+                    optimized_text=record.get("optimized_text"),
+                    token_count=record.get(token_count_key, 0),
+                    parsed_result=result if isinstance(result, dict) else {},
+                    error=result.get("error") if isinstance(result, dict) else None,
+                ))
+
+            db.add_all(records_to_insert)
+            await db.commit()
 
 
 class Pipeline:
@@ -104,21 +145,14 @@ class Pipeline:
                 job.job_metadata = context.metadata
                 await db.commit()
 
-                records_to_insert = []
-                for i, record in enumerate(context.records):
-                    result = context.results[i] if i < len(context.results) else {}
-                    records_to_insert.append(JobRecord(
-                        job_id=job_id,
-                        record_index=i,
-                        original_data=record,
-                        optimized_text=record.get("optimized_text"),
-                        token_count=record.get("token_count", 0),
-                        parsed_result=result if isinstance(result, dict) else {},
-                        error=result.get("error") if isinstance(result, dict) else None,
-                    ))
-
-                db.add_all(records_to_insert)
-                await db.commit()
+        # Persist records in batches (separate session to avoid long transaction)
+        await _persist_job_records(
+            job_id=job_id,
+            records=context.records,
+            results=context.results,
+            original_data_filter=False,
+            token_count_key="token_count",
+        )
 
 
 class AnalyzePipeline:
@@ -205,21 +239,14 @@ class AnalyzePipeline:
                 job.job_metadata = context.metadata
                 await db.commit()
 
-                records_to_insert = []
-                for i, record in enumerate(context.records):
-                    result = context.results[i] if i < len(context.results) else {}
-                    records_to_insert.append(JobRecord(
-                        job_id=job_id,
-                        record_index=i,
-                        original_data={k: v for k, v in record.items() if not k.startswith("_")},
-                        optimized_text=record.get("optimized_text"),
-                        token_count=record.get("token_count_original", 0),
-                        parsed_result=result if isinstance(result, dict) else {},
-                        error=result.get("error") if isinstance(result, dict) else None,
-                    ))
-
-                db.add_all(records_to_insert)
-                await db.commit()
+        # Persist records in batches (separate session to avoid long transaction)
+        await _persist_job_records(
+            job_id=job_id,
+            records=context.records,
+            results=context.results,
+            original_data_filter=True,
+            token_count_key="token_count_original",
+        )
 
 
 async def run_pipeline(request: JobRequest) -> JobResponse:
