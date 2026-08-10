@@ -5,6 +5,7 @@ No classes, no internal state - just pure transformations.
 """
 
 import io
+from datetime import UTC, datetime
 from typing import Any
 
 import pandas as pd
@@ -110,5 +111,51 @@ def export_engine(context: EngineContext) -> EngineContext:
             exports[fmt] = result_bytes
 
     context.metadata.exports = exports
+    return context
+
+
+def validation_engine(context: EngineContext) -> EngineContext:
+    """Validate required columns and filter out invalid records."""
+    required_columns = context.metadata.required_columns or []
+    validated = []
+    rejected = 0
+
+    for i, record in enumerate(context.records):
+        missing = [col for col in required_columns if col not in record or not record[col]]
+        if missing:
+            context.add_error(
+                "validation",
+                f"Missing required columns: {missing}",
+                record_index=i,
+            )
+            rejected += 1
+            continue
+        validated.append(record)
+
+    context.records = validated
+    context.metrics.validated_count = len(validated)
+    context.metrics.rejected_count = rejected
+    return context
+
+
+def history_engine(context: EngineContext) -> EngineContext:
+    """Track execution metadata, metrics, and performance history."""
+    metrics_dict = (
+        context.metrics.model_dump()
+        if hasattr(context.metrics, "model_dump")
+        else dict(context.metrics)
+    )
+    summary = {
+        "batch_id": context.batch_id,
+        "batch_index": context.batch_index,
+        "total_batches": context.total_batches,
+        "timestamp": datetime.now(UTC).isoformat(),
+        "record_count": len(context.records),
+        "metrics": metrics_dict,
+        "error_count": len(context.errors),
+    }
+    history = context.metadata.history or []
+    history.append(summary)
+    context.metadata.history = history
     return context
 

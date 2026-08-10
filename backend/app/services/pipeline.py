@@ -9,12 +9,16 @@ from app.core.database import async_session
 from app.engines.analyze.engine import AnalyzeEngine
 from app.engines.base import BaseEngine
 from app.engines.context_models import EngineContext, RecordDict, ResultDict
-from app.engines.engine_functions import cost_engine, export_engine, tokenizer_engine
-from app.engines.history.engine import HistoryEngine
+from app.engines.engine_functions import (
+    cost_engine,
+    export_engine,
+    history_engine,
+    tokenizer_engine,
+    validation_engine,
+)
 from app.engines.input.engine import InputEngine
 from app.engines.optimization.engine import OptimizationEngine
 from app.engines.token_compare.engine import TokenCompareEngine
-from app.engines.validation.engine import ValidationEngine
 from app.models import Job, JobStatus
 from app.schemas.job import AnalyzeRequest, AnalyzeResponse, JobRequest, JobResponse
 
@@ -97,12 +101,12 @@ class Pipeline:
     def __init__(self) -> None:
         self.engines: list[tuple[str, BaseEngine | EngineCallable]] = [
             ("input", InputEngine()),
-            ("validation", ValidationEngine()),
+            ("validation", validation_engine),
             ("optimization", OptimizationEngine()),
             ("tokenizer", tokenizer_engine),
             ("cost", cost_engine),
             ("export", export_engine),
-            ("history", HistoryEngine()),
+            ("history", history_engine),
         ]
 
     async def run(self, request: JobRequest) -> JobResponse:
@@ -179,12 +183,12 @@ class AnalyzePipeline:
     def __init__(self) -> None:
         self.engines: list[tuple[str, BaseEngine | EngineCallable]] = [
             ("input", InputEngine()),
-            ("validation", ValidationEngine()),
+            ("validation", validation_engine),
             ("optimization", OptimizationEngine()),
             ("token_compare", TokenCompareEngine()),
             ("analyze", AnalyzeEngine()),
             ("export", export_engine),
-            ("history", HistoryEngine()),
+            ("history", history_engine),
         ]
 
     async def run(self, request: AnalyzeRequest) -> AnalyzeResponse:
