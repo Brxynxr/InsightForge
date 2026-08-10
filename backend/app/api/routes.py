@@ -4,6 +4,7 @@ import sys
 import tempfile
 from pathlib import Path
 
+import aiofiles
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import JSONResponse
 from loguru import logger
@@ -25,6 +26,38 @@ from app.services.pipeline import run_analyze_pipeline, run_pipeline
 
 router = APIRouter(prefix="/api/v1")
 
+MAX_FILE_SIZE = 50 * 1024 * 1024  # 50 MB
+CHUNK_SIZE = 1024 * 1024  # 1 MB chunks
+
+
+async def save_upload_file(file: UploadFile, suffix: str) -> str:
+    """Stream upload file to temp file with size limit.
+
+    Args:
+        file: UploadFile from FastAPI
+        suffix: File extension (e.g., '.xlsx')
+
+    Returns:
+        Path to the temporary file
+
+    Raises:
+        HTTPException: If file exceeds MAX_FILE_SIZE
+    """
+    async with aiofiles.tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+        tmp_path: str = tmp.name
+        total_written = 0
+        while chunk := await file.read(CHUNK_SIZE):
+            total_written += len(chunk)
+            if total_written > MAX_FILE_SIZE:
+                await tmp.close()
+                os.unlink(tmp_path)
+                raise HTTPException(
+                    status_code=413,
+                    detail=f"File too large. Maximum size is {MAX_FILE_SIZE / (1024*1024):.0f}MB"
+                )
+            await tmp.write(chunk)
+    return tmp_path
+
 
 @router.post("/process", response_model=JobResponse)
 async def process_job(
@@ -41,9 +74,7 @@ async def process_job(
     suffix = os.path.splitext(file.filename or ".xlsx")[1]
     tmp_path = None
     try:
-        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-            tmp.write(file.file.read())
-            tmp_path = tmp.name
+        tmp_path = await save_upload_file(file, suffix)
 
         request = JobRequest(
             file_path=tmp_path,
@@ -56,6 +87,8 @@ async def process_job(
         result = await run_pipeline(request)
         logger.info(f"Job {result.batch_id} completed: {result.status}")
         return result
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Process job failed: {e}")
         raise HTTPException(status_code=500, detail=str(e)) from e
@@ -76,9 +109,7 @@ async def analyze_reviews(
     suffix = os.path.splitext(file.filename or ".xlsx")[1]
     tmp_path = None
     try:
-        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-            tmp.write(file.file.read())
-            tmp_path = tmp.name
+        tmp_path = await save_upload_file(file, suffix)
 
         request = AnalyzeRequest(
             file_path=tmp_path,
@@ -90,6 +121,8 @@ async def analyze_reviews(
         result = await run_analyze_pipeline(request)
         logger.info(f"Analyze job {result.batch_id} completed: {result.status}")
         return result
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Analyze job failed: {e}")
         raise HTTPException(status_code=500, detail=str(e)) from e
@@ -156,9 +189,7 @@ async def benchmark_file(
     suffix = os.path.splitext(file.filename or ".xlsx")[1]
     tmp_path = None
     try:
-        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-            tmp.write(file.file.read())
-            tmp_path = tmp.name
+        tmp_path = await save_upload_file(file, suffix)
 
         result = await asyncio.to_thread(
             run_benchmark,
@@ -173,11 +204,14 @@ async def benchmark_file(
             f"in {result['totals']['total_time_seconds']}s"
         )
         return BenchmarkResult(**result)
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Benchmark failed: {e}")
         raise HTTPException(status_code=500, detail=str(e)) from e
     finally:
         if tmp_path and os.path.exists(tmp_path):
+            os.unlink(tmp_path)
             os.unlink(tmp_path)
 
 
