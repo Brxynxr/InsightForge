@@ -13,11 +13,11 @@ from app.engines.engine_functions import (
     cost_engine,
     export_engine,
     history_engine,
+    input_engine,
     token_compare_engine,
     tokenizer_engine,
     validation_engine,
 )
-from app.engines.input.engine import InputEngine
 from app.engines.optimization.engine import OptimizationEngine
 from app.models import Job, JobStatus
 from app.schemas.job import AnalyzeRequest, AnalyzeResponse, JobRequest, JobResponse
@@ -100,7 +100,7 @@ class Pipeline:
 
     def __init__(self) -> None:
         self.engines: list[tuple[str, BaseEngine | EngineCallable]] = [
-            ("input", InputEngine()),
+            ("input", input_engine),
             ("validation", validation_engine),
             ("optimization", OptimizationEngine()),
             ("tokenizer", tokenizer_engine),
@@ -182,7 +182,7 @@ class AnalyzePipeline:
 
     def __init__(self) -> None:
         self.engines: list[tuple[str, BaseEngine | EngineCallable]] = [
-            ("input", InputEngine()),
+            ("input", input_engine),
             ("validation", validation_engine),
             ("optimization", OptimizationEngine()),
             ("token_compare", token_compare_engine),
