@@ -5,6 +5,7 @@ from typing import Any
 
 from deep_translator import GoogleTranslator
 from loguru import logger
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from app.engines.base import BaseEngine, EngineContext
 
@@ -15,9 +16,12 @@ class OptimizationEngine(BaseEngine):
 
     Uses asyncio.to_thread() for GoogleTranslator (sync lib) with semaphore
     to achieve real concurrency (default 20 parallel translations).
+    Includes timeout (10s) and retry with exponential backoff (max 3 attempts).
     """
 
     MAX_CONCURRENT_TRANSLATIONS = 20
+    TRANSLATION_TIMEOUT = 10.0  # seconds
+    MAX_RETRIES = 3
 
     def __init__(self, cache: dict[str, Any] | None = None) -> None:
         self._cache: dict[str, Any] = cache or {}
@@ -72,15 +76,26 @@ class OptimizationEngine(BaseEngine):
         target_language: str,
         context: EngineContext,
     ) -> int:
-        """Translate a batch of texts with controlled concurrency."""
+        """Translate a batch of texts with controlled concurrency, timeout and retry."""
         if not to_translate:
             return 0
 
         semaphore = asyncio.Semaphore(self.MAX_CONCURRENT_TRANSLATIONS)
         translated_count = 0
+        failed_count = 0
+
+        @retry(
+            wait=wait_exponential(multiplier=1, min=1, max=10),
+            stop=stop_after_attempt(self.MAX_RETRIES),
+            retry=retry_if_exception_type(Exception),
+            reraise=True,
+        )
+        async def _translate_with_retry(text: str, target_lang: str) -> str:
+            translator = GoogleTranslator(source="auto", target=target_lang)
+            return await asyncio.to_thread(translator.translate, text)
 
         async def translate_one(index: int, text: str) -> None:
-            nonlocal translated_count
+            nonlocal translated_count, failed_count
             async with semaphore:
                 normalized = self._normalize(text)
                 if not normalized:
@@ -88,22 +103,39 @@ class OptimizationEngine(BaseEngine):
                     return
 
                 try:
-                    # GoogleTranslator is sync -> run in thread pool
-                    translator = GoogleTranslator(source="auto", target=target_language)
-                    optimized = await asyncio.to_thread(translator.translate, normalized)
+                    # GoogleTranslator is sync -> run in thread pool with timeout + retry
+                    optimized = await asyncio.wait_for(
+                        _translate_with_retry(normalized, target_language),
+                        timeout=self.TRANSLATION_TIMEOUT,
+                    )
                     context.records[index]["optimized_text"] = optimized
                     key_data = {"text": text, "lang": target_language}
                     cache_key = hashlib.md5(json.dumps(key_data).encode()).hexdigest()
                     self._cache[cache_key] = optimized
                     translated_count += 1
-                except Exception as e:
+                except TimeoutError:
                     logger.warning(
-                        f"Translation failed for record {index}: {text[:50]}... Error: {e}"
+                        "Translation timeout "
+                        f"({self.TRANSLATION_TIMEOUT}s) for record {index}: "
+                        f"{text[:50]}..."
                     )
                     context.records[index]["optimized_text"] = normalized
+                    context.records[index]["translation_error"] = "timeout"
+                    failed_count += 1
+                except Exception as e:
+                    logger.warning(
+                        "Translation failed after "
+                        f"{self.MAX_RETRIES} retries for record {index}: "
+                        f"{text[:50]}... Error: {e}"
+                    )
+                    context.records[index]["optimized_text"] = normalized
+                    context.records[index]["translation_error"] = str(e)[:200]
+                    failed_count += 1
 
         tasks = [translate_one(idx, text) for idx, text in to_translate]
         await asyncio.gather(*tasks)
+
+        context.metrics["translation_failures"] = failed_count
         return translated_count
 
     def _normalize(self, text: str) -> str:

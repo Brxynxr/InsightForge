@@ -1,9 +1,11 @@
+import asyncio
 import json
 import time
 from typing import Any
 
 import httpx
 import tiktoken
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from app.core.config import settings
 from app.engines.base import BaseEngine, EngineContext
@@ -36,8 +38,9 @@ class AnalyzeEngine(BaseEngine):
 
     BATCH_SIZE = 50
     MAX_CONCURRENT = 20
-    MAX_RETRIES = 2
-    RETRY_DELAY = 0.5
+    MAX_RETRIES = 3
+    RETRY_BASE_DELAY = 1.0
+    LLM_TIMEOUT = 60.0  # seconds
 
     def __init__(self) -> None:
         self._encoding = tiktoken.get_encoding(settings.TOKENIZER_ENCODING)
@@ -72,8 +75,8 @@ class AnalyzeEngine(BaseEngine):
     async def analyze_async(self, context: EngineContext) -> list[dict[str, Any]]:
         """Run the async batch LLM analysis. Called by the pipeline."""
         records = context.records
-        results = [None] * len(records)
-        semaphore = __import__("asyncio").Semaphore(self.MAX_CONCURRENT)
+        results: list[dict[str, Any] | None] = [None] * len(records)
+        semaphore = asyncio.Semaphore(self.MAX_CONCURRENT)
         tasks = []
 
         for i, record in enumerate(records):
@@ -90,10 +93,9 @@ class AnalyzeEngine(BaseEngine):
             tasks.append(self._analyze_single(i, record, semaphore, results))
 
         if tasks:
-            import asyncio
             await asyncio.gather(*tasks)
 
-        context.results = results
+        context.results = results  # type: ignore[assignment]
 
         context.metrics["cost_per_million"] = 2.50
         context.metrics["estimated_cost_input"] = round(
@@ -106,16 +108,15 @@ class AnalyzeEngine(BaseEngine):
             len(records) / max(elapsed, 0.001), 1
         )
 
-        return results
+        return results  # type: ignore[return-value]
 
     async def _analyze_single(
         self,
         index: int,
         record: dict[str, Any],
-        semaphore: Any,
-        results: list,
+        semaphore: asyncio.Semaphore,
+        results: list[dict[str, Any] | None],
     ) -> None:
-        import asyncio
         async with semaphore:
             text = record.get("reseña", record.get("text", ""))
             optimized_text = record.get("optimized_text", text)
@@ -123,47 +124,43 @@ class AnalyzeEngine(BaseEngine):
             prompt_text = optimized_text if optimized_text else text
             prompt_tokens = len(self._encoding.encode(prompt_text))
 
-            for attempt in range(self.MAX_RETRIES):
-                try:
-                    result = await self._call_llm(prompt_text)
-                    tokens_used = len(self._encoding.encode(result))
-                    parsed = self._parse_response(result)
+            try:
+                result = await self._call_llm_with_retry(prompt_text)
+                tokens_used = len(self._encoding.encode(result))
+                parsed = self._parse_response(result)
 
-                    results[index] = {
-                        "record_index": index,
-                        **parsed,
-                        "tokens_used": prompt_tokens + tokens_used,
-                        "raw_response": result,
-                    }
-                    return
-                except Exception as e:
-                    if attempt < self.MAX_RETRIES - 1:
-                        await asyncio.sleep(self.RETRY_DELAY * (attempt + 1))
-                    else:
-                        results[index] = {
-                            "record_index": index,
-                            "error_type": "analysis_failed",
-                            "component": "unknown",
-                            "severity": "unknown",
-                            "summary": f"Failed after {self.MAX_RETRIES} attempts: {str(e)[:80]}",
-                            "tokens_used": 0,
-                            "raw_response": None,
-                            "error": str(e)[:200],
-                        }
+                results[index] = {
+                    "record_index": index,
+                    **parsed,
+                    "tokens_used": prompt_tokens + tokens_used,
+                    "raw_response": result,
+                }
+            except Exception as e:
+                results[index] = {
+                    "record_index": index,
+                    "error_type": "analysis_failed",
+                    "component": "unknown",
+                    "severity": "unknown",
+                    "summary": f"Failed after {self.MAX_RETRIES} attempts: {str(e)[:80]}",
+                    "tokens_used": 0,
+                    "raw_response": None,
+                    "error": str(e)[:200],
+                }
 
-    async def _call_llm(self, text: str) -> str:
+    @retry(
+        wait=wait_exponential(multiplier=1, min=1, max=20),
+        stop=stop_after_attempt(3),
+        retry=retry_if_exception_type((httpx.HTTPError, asyncio.TimeoutError)),
+        reraise=True,
+    )
+    async def _call_llm_with_retry(self, text: str) -> str:
         api_key = settings.OPENAI_API_KEY
         if not api_key:
-            return json.dumps({
-                "error_type": "no_api_key",
-                "component": "system",
-                "severity": "critical",
-                "summary": "No OPENAI_API_KEY configured",
-            })
+            raise RuntimeError("OPENAI_API_KEY not configured")
 
         prompt_content = ANALYSIS_PROMPT.replace("{text}", text[:2000])
 
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(timeout=self.LLM_TIMEOUT) as client:
             resp = await client.post(
                 "https://api.openai.com/v1/chat/completions",
                 headers={
@@ -182,7 +179,12 @@ class AnalyzeEngine(BaseEngine):
             )
             resp.raise_for_status()
             data = resp.json()
-            return data["choices"][0]["message"]["content"].strip()
+
+            if not data.get("choices") or not data["choices"]:
+                raise ValueError("OpenAI response missing 'choices'")
+
+            content = data["choices"][0]["message"]["content"]
+            return content.strip() if content else ""
 
     def _parse_response(self, raw: str) -> dict[str, Any]:
         cleaned = raw.strip()

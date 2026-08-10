@@ -25,6 +25,7 @@ httpx = "^0.28.0"
 python-multipart = "^0.0.18"
 aiofiles = "^24.1.0"
 loguru = "^0.7.0"
+tenacity = "^8.2.0"
 
 [tool.poetry.extras]
 redis = ["redis"]
