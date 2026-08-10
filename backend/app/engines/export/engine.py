@@ -3,22 +3,28 @@ from typing import Any
 
 import pandas as pd
 
-from app.engines.base import BaseEngine, EngineContext
+from app.engines.base import BaseEngine
+from app.engines.context_models import EngineContext
 
 
 class ExportEngine(BaseEngine):
     """Responsible for Excel, JSON, CSV exports."""
 
     def execute(self, context: EngineContext) -> EngineContext:
-        formats = context.metadata.get("export_formats") or ["json"]
+        formats = context.metadata.export_formats or ["json"]
         records = context.records
-        results = context.results or []
+        results = context.results
 
         merged = []
         for i, record in enumerate(records):
-            row = {**record}
+            row = record.model_dump()
             if i < len(results):
-                row["result"] = results[i]
+                result_item = results[i]
+                row["result"] = (
+                    result_item.model_dump()
+                    if hasattr(result_item, "model_dump")
+                    else result_item
+                )
             merged.append(row)
 
         exports: dict[str, Any] = {}
@@ -37,5 +43,5 @@ class ExportEngine(BaseEngine):
                 result_bytes = df.to_json(orient="records").encode("utf-8")
                 exports[fmt] = result_bytes
 
-        context.metadata["exports"] = exports
+        context.metadata.exports = exports
         return context

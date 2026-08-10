@@ -8,7 +8,8 @@ import tiktoken
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from app.core.config import settings
-from app.engines.base import BaseEngine, EngineContext
+from app.engines.base import BaseEngine
+from app.engines.context_models import EngineContext, RecordDict
 
 ANALYSIS_PROMPT = """You are an app review analyst.
 Analyze the following review and extract:
@@ -47,11 +48,11 @@ class AnalyzeEngine(BaseEngine):
 
     def execute(self, context: EngineContext) -> EngineContext:
         records = context.records
-        optimize_tokens = context.metadata.get("optimize_tokens", True)
+        optimize_tokens = context.metadata.optimize_tokens
 
-        context.metrics["total_records_input"] = len(records)
-        context.metrics["optimize_tokens_enabled"] = optimize_tokens
-        context.metrics["start_time"] = time.time()
+        context.metrics.total_records_input = len(records)
+        context.metrics.optimize_tokens_enabled = optimize_tokens
+        context.metrics.start_time = time.time()
 
         total_input_tokens = 0
         empty_count = 0
@@ -66,9 +67,9 @@ class AnalyzeEngine(BaseEngine):
             record["token_count_original"] = len(tokens)
             total_input_tokens += len(tokens)
 
-        context.metrics["total_input_tokens"] = total_input_tokens
-        context.metrics["empty_reviews"] = empty_count
-        context.metrics["reviews_to_analyze"] = len(records) - empty_count
+        context.metrics.total_input_tokens = total_input_tokens
+        context.metrics.empty_reviews = empty_count
+        context.metrics.reviews_to_analyze = len(records) - empty_count
 
         return context
 
@@ -97,14 +98,14 @@ class AnalyzeEngine(BaseEngine):
 
         context.results = results  # type: ignore[assignment]
 
-        context.metrics["cost_per_million"] = 2.50
-        context.metrics["estimated_cost_input"] = round(
-            (context.metrics.get("total_input_tokens", 0) / 1_000_000) * 2.50, 4
+        context.metrics.cost_per_million = 2.50
+        context.metrics.estimated_cost_input = round(
+            (context.metrics.total_input_tokens / 1_000_000) * 2.50, 4
         )
 
-        elapsed = time.time() - context.metrics["start_time"]
-        context.metrics["processing_time_seconds"] = round(elapsed, 2)
-        context.metrics["reviews_per_second"] = round(
+        elapsed = time.time() - context.metrics.start_time
+        context.metrics.processing_time_seconds = round(elapsed, 2)
+        context.metrics.reviews_per_second = round(
             len(records) / max(elapsed, 0.001), 1
         )
 
@@ -113,7 +114,7 @@ class AnalyzeEngine(BaseEngine):
     async def _analyze_single(
         self,
         index: int,
-        record: dict[str, Any],
+        record: RecordDict,
         semaphore: asyncio.Semaphore,
         results: list[dict[str, Any] | None],
     ) -> None:

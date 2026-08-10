@@ -7,7 +7,8 @@ from deep_translator import GoogleTranslator
 from loguru import logger
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
-from app.engines.base import BaseEngine, EngineContext
+from app.engines.base import BaseEngine
+from app.engines.context_models import EngineContext
 
 
 class OptimizationEngine(BaseEngine):
@@ -29,18 +30,18 @@ class OptimizationEngine(BaseEngine):
         self._cache: LRUCache = cache or LRUCache(maxsize=self.CACHE_MAX_SIZE)
 
     async def execute(self, context: EngineContext) -> EngineContext:
-        target_language = context.metadata.get("target_language") or "en"
-        optimize = context.metadata.get("optimize_tokens", True)
-        review_column = context.metadata.get("review_column") or "reseña"
+        target_language = context.metadata.target_language or "en"
+        optimize = context.metadata.optimize_tokens
+        review_column = context.metadata.review_column or "reseña"
 
         if not optimize:
             for record in context.records:
                 text = record.get(review_column, record.get("text", ""))
                 record["optimized_text"] = text
                 record["translation_hit"] = False
-            context.metrics["translations_performed"] = 0
-            context.metrics["translations_skipped"] = len(context.records)
-            context.metrics["translation_hits"] = 0
+            context.metrics.translations_performed = 0
+            context.metrics.translations_skipped = len(context.records)
+            context.metrics.translation_hits = 0
             return context
 
         # Separate cached vs non-cached records
@@ -63,10 +64,10 @@ class OptimizationEngine(BaseEngine):
         )
 
         skipped_count = len(context.records) - translated_count
-        context.metadata["optimization_cache_size"] = len(self._cache)
-        context.metrics["translations_performed"] = translated_count
-        context.metrics["translations_skipped"] = skipped_count
-        context.metrics["translation_hits"] = sum(
+        context.metadata.optimization_cache_size = len(self._cache)
+        context.metrics.translations_performed = translated_count
+        context.metrics.translations_skipped = skipped_count
+        context.metrics.translation_hits = sum(
             1 for r in context.records if r.get("translation_hit")
         )
 
@@ -137,7 +138,7 @@ class OptimizationEngine(BaseEngine):
         tasks = [translate_one(idx, text) for idx, text in to_translate]
         await asyncio.gather(*tasks)
 
-        context.metrics["translation_failures"] = failed_count
+        context.metrics.translation_failures = failed_count
         return translated_count
 
     def _normalize(self, text: str) -> str:

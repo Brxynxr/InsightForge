@@ -1,7 +1,8 @@
 import tiktoken
 
 from app.core.config import settings
-from app.engines.base import BaseEngine, EngineContext
+from app.engines.base import BaseEngine
+from app.engines.context_models import EngineContext
 
 
 class TokenCompareEngine(BaseEngine):
@@ -37,42 +38,32 @@ class TokenCompareEngine(BaseEngine):
         cost_translated = (total_translated / 1_000_000) * cost_per_million
         cost_savings = cost_original - cost_translated
 
-        context.metrics["token_comparison"] = {
+        n = max(len(records), 1)
+        factor_daily = 10000 / n
+        factor_monthly = 300000 / n
+
+        context.metrics.token_comparison = {
             "total_original_tokens": total_original,
             "total_translated_tokens": total_translated,
             "token_difference": total_diff,
-            "percentage_reduction": round(
-                (total_diff / max(total_original, 1)) * 100, 2
-            ),
+            "percentage_reduction": round((total_diff / max(total_original, 1)) * 100, 2),
             "cost_original_usd": round(cost_original, 4),
             "cost_translated_usd": round(cost_translated, 4),
             "cost_savings_usd": round(cost_savings, 4),
             "cost_per_million_tokens": cost_per_million,
             "daily_projection_10k": {
-                "tokens_original": total_original * (10000 // max(len(records), 1)),
-                "tokens_translated": total_translated * (10000 // max(len(records), 1)),
-                "cost_original_usd": round(
-                    cost_original * (10000 // max(len(records), 1)), 2
-                ),
-                "cost_translated_usd": round(
-                    cost_translated * (10000 // max(len(records), 1)), 2
-                ),
-                "savings_usd": round(
-                    cost_savings * (10000 // max(len(records), 1)), 2
-                ),
+                "tokens_original": round(total_original * factor_daily),
+                "tokens_translated": round(total_translated * factor_daily),
+                "cost_original_usd": round(cost_original * factor_daily, 2),
+                "cost_translated_usd": round(cost_translated * factor_daily, 2),
+                "savings_usd": round(cost_savings * factor_daily, 2),
             },
             "monthly_projection_300k": {
-                "tokens_original": total_original * (300000 // max(len(records), 1)),
-                "tokens_translated": total_translated * (300000 // max(len(records), 1)),
-                "cost_original_usd": round(
-                    cost_original * (300000 // max(len(records), 1)), 2
-                ),
-                "cost_translated_usd": round(
-                    cost_translated * (300000 // max(len(records), 1)), 2
-                ),
-                "savings_usd": round(
-                    cost_savings * (300000 // max(len(records), 1)), 2
-                ),
+                "tokens_original": round(total_original * factor_monthly),
+                "tokens_translated": round(total_translated * factor_monthly),
+                "cost_original_usd": round(cost_original * factor_monthly, 2),
+                "cost_translated_usd": round(cost_translated * factor_monthly, 2),
+                "savings_usd": round(cost_savings * factor_monthly, 2),
             },
         }
 

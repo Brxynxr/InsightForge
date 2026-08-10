@@ -1,7 +1,8 @@
 import tiktoken
 
 from app.core.config import settings
-from app.engines.base import BaseEngine, EngineContext
+from app.engines.base import BaseEngine
+from app.engines.context_models import EngineContext
 
 
 class TokenizerEngine(BaseEngine):
@@ -19,6 +20,6 @@ class TokenizerEngine(BaseEngine):
             record["token_count"] = token_count
             total_tokens += token_count
 
-        context.metrics["total_tokens"] = total_tokens
-        context.metrics["avg_tokens_per_record"] = total_tokens / max(len(context.records), 1)
+        context.metrics.total_tokens = total_tokens
+        context.metrics.avg_tokens_per_record = total_tokens / max(len(context.records), 1)
         return context
