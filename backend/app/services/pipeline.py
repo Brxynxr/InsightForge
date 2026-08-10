@@ -13,12 +13,12 @@ from app.engines.engine_functions import (
     cost_engine,
     export_engine,
     history_engine,
+    token_compare_engine,
     tokenizer_engine,
     validation_engine,
 )
 from app.engines.input.engine import InputEngine
 from app.engines.optimization.engine import OptimizationEngine
-from app.engines.token_compare.engine import TokenCompareEngine
 from app.models import Job, JobStatus
 from app.schemas.job import AnalyzeRequest, AnalyzeResponse, JobRequest, JobResponse
 
@@ -185,7 +185,7 @@ class AnalyzePipeline:
             ("input", InputEngine()),
             ("validation", validation_engine),
             ("optimization", OptimizationEngine()),
-            ("token_compare", TokenCompareEngine()),
+            ("token_compare", token_compare_engine),
             ("analyze", AnalyzeEngine()),
             ("export", export_engine),
             ("history", history_engine),
