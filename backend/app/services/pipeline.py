@@ -1,5 +1,7 @@
+import inspect
 import time
 import uuid
+from collections.abc import Awaitable
 from datetime import UTC, datetime
 
 from app.core.database import async_session
@@ -15,6 +17,19 @@ from app.engines.tokenizer.engine import TokenizerEngine
 from app.engines.validation.engine import ValidationEngine
 from app.models import Job, JobRecord, JobStatus
 from app.schemas.job import AnalyzeRequest, AnalyzeResponse, JobRequest, JobResponse
+
+
+def _is_async_engine(engine: BaseEngine) -> bool:
+    """Check if engine.execute is a coroutine function."""
+    return inspect.iscoroutinefunction(engine.execute)
+
+
+async def _run_engine(engine: BaseEngine, context: EngineContext) -> EngineContext:
+    """Execute engine, handling both sync and async execute methods."""
+    result = engine.execute(context)
+    if isinstance(result, Awaitable):
+        return await result
+    return result
 
 
 class Pipeline:
@@ -60,7 +75,7 @@ class Pipeline:
         )
 
         for _name, engine in self.engines:
-            context = engine.execute(context)
+            context = await _run_engine(engine, context)
 
         await self._persist_job(job_id, context)
 
@@ -154,9 +169,8 @@ class AnalyzePipeline:
         for _name, engine in self.engines:
             if isinstance(engine, AnalyzeEngine):
                 analyze_engine = engine
-                context = engine.execute(context)
-            else:
-                context = engine.execute(context)
+
+            context = await _run_engine(engine, context)
 
         if analyze_engine:
             await analyze_engine.analyze_async(context)

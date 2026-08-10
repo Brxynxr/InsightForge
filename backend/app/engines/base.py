@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from collections.abc import Awaitable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -28,6 +29,8 @@ class BaseEngine(ABC):
     """
 
     @abstractmethod
-    def execute(self, context: EngineContext) -> EngineContext:
-        """Execute the engine's responsibility on the given context."""
+    def execute(self, context: EngineContext) -> EngineContext | Awaitable[EngineContext]:
+        """Execute the engine's responsibility on the given context.
+        Can be sync or async.
+        """
         ...
