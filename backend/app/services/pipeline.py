@@ -6,19 +6,20 @@ from datetime import UTC, datetime
 from typing import Any
 
 from app.core.database import async_session
-from app.engines.analyze.engine import AnalyzeEngine
 from app.engines.base import BaseEngine
 from app.engines.context_models import EngineContext, RecordDict, ResultDict
 from app.engines.engine_functions import (
+    analyze_async_engine,
+    analyze_engine,
     cost_engine,
     export_engine,
     history_engine,
     input_engine,
+    optimization_engine,
     token_compare_engine,
     tokenizer_engine,
     validation_engine,
 )
-from app.engines.optimization.engine import OptimizationEngine
 from app.models import Job, JobStatus
 from app.schemas.job import AnalyzeRequest, AnalyzeResponse, JobRequest, JobResponse
 
@@ -102,7 +103,7 @@ class Pipeline:
         self.engines: list[tuple[str, BaseEngine | EngineCallable]] = [
             ("input", input_engine),
             ("validation", validation_engine),
-            ("optimization", OptimizationEngine()),
+            ("optimization", optimization_engine),
             ("tokenizer", tokenizer_engine),
             ("cost", cost_engine),
             ("export", export_engine),
@@ -184,9 +185,9 @@ class AnalyzePipeline:
         self.engines: list[tuple[str, BaseEngine | EngineCallable]] = [
             ("input", input_engine),
             ("validation", validation_engine),
-            ("optimization", OptimizationEngine()),
+            ("optimization", optimization_engine),
             ("token_compare", token_compare_engine),
-            ("analyze", AnalyzeEngine()),
+            ("analyze", analyze_engine),
             ("export", export_engine),
             ("history", history_engine),
         ]
@@ -221,15 +222,10 @@ class AnalyzePipeline:
             },
         )
 
-        analyze_engine = None
         for _name, engine in self.engines:
-            if isinstance(engine, AnalyzeEngine):
-                analyze_engine = engine
-
             context = await _run_engine(engine, context)
 
-        if analyze_engine:
-            await analyze_engine.analyze_async(context)
+        await analyze_async_engine(context)
 
         await self._persist_job(job_id, context)
 
