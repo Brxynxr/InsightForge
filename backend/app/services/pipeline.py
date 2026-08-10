@@ -9,15 +9,13 @@ from app.core.database import async_session
 from app.engines.analyze.engine import AnalyzeEngine
 from app.engines.base import BaseEngine
 from app.engines.context_models import EngineContext, RecordDict, ResultDict
-from app.engines.cost.engine import CostEngine
-from app.engines.engine_functions import tokenizer_engine
-from app.engines.export.engine import ExportEngine
+from app.engines.engine_functions import cost_engine, export_engine, tokenizer_engine
 from app.engines.history.engine import HistoryEngine
 from app.engines.input.engine import InputEngine
 from app.engines.optimization.engine import OptimizationEngine
 from app.engines.token_compare.engine import TokenCompareEngine
 from app.engines.validation.engine import ValidationEngine
-from app.models import Job, JobRecord, JobStatus
+from app.models import Job, JobStatus
 from app.schemas.job import AnalyzeRequest, AnalyzeResponse, JobRequest, JobResponse
 
 BATCH_INSERT_SIZE = 1000
@@ -50,6 +48,7 @@ async def _persist_job_records(
 ) -> None:
     """Persist job records in batches to avoid memory issues with large datasets."""
     from app.core.database import async_session
+    from app.models import JobRecord
 
     async with async_session() as db:
         for i in range(0, len(records), BATCH_INSERT_SIZE):
@@ -101,8 +100,8 @@ class Pipeline:
             ("validation", ValidationEngine()),
             ("optimization", OptimizationEngine()),
             ("tokenizer", tokenizer_engine),
-            ("cost", CostEngine()),
-            ("export", ExportEngine()),
+            ("cost", cost_engine),
+            ("export", export_engine),
             ("history", HistoryEngine()),
         ]
 
@@ -178,13 +177,13 @@ class AnalyzePipeline:
     """Specialized pipeline for app review analysis with token comparison."""
 
     def __init__(self) -> None:
-        self.engines: list[tuple[str, BaseEngine]] = [
+        self.engines: list[tuple[str, BaseEngine | EngineCallable]] = [
             ("input", InputEngine()),
             ("validation", ValidationEngine()),
             ("optimization", OptimizationEngine()),
             ("token_compare", TokenCompareEngine()),
             ("analyze", AnalyzeEngine()),
-            ("export", ExportEngine()),
+            ("export", export_engine),
             ("history", HistoryEngine()),
         ]
 
