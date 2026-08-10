@@ -1,8 +1,8 @@
 import asyncio
 import hashlib
 import json
-from typing import Any
 
+from cachetools import LRUCache
 from deep_translator import GoogleTranslator
 from loguru import logger
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
@@ -17,14 +17,16 @@ class OptimizationEngine(BaseEngine):
     Uses asyncio.to_thread() for GoogleTranslator (sync lib) with semaphore
     to achieve real concurrency (default 20 parallel translations).
     Includes timeout (10s) and retry with exponential backoff (max 3 attempts).
+    Uses LRU cache (max 10000 entries) to avoid unbounded memory growth.
     """
 
     MAX_CONCURRENT_TRANSLATIONS = 20
     TRANSLATION_TIMEOUT = 10.0  # seconds
     MAX_RETRIES = 3
+    CACHE_MAX_SIZE = 10000
 
-    def __init__(self, cache: dict[str, Any] | None = None) -> None:
-        self._cache: dict[str, Any] = cache or {}
+    def __init__(self, cache: LRUCache | None = None) -> None:
+        self._cache: LRUCache = cache or LRUCache(maxsize=self.CACHE_MAX_SIZE)
 
     async def execute(self, context: EngineContext) -> EngineContext:
         target_language = context.metadata.get("target_language") or "en"
